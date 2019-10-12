@@ -23,7 +23,7 @@ func TestLetStatements(t *testing.T) {
 
 	program := p.ParseProgram()
 	assert.NotNil(program)
-	assert.Equal(len(program.Statements), 3)
+	assert.Equal(3, len(program.Statements))
 
 	tests := []struct {
 		expectedIdentifier string
@@ -61,4 +61,25 @@ func TestLetSTatementsWithErrors(t *testing.T) {
 	assert.Equal(errList[0], "expected next token to be =, got INT instead")
 	assert.Equal(errList[1], "expected next token to be IDENT, got = instead")
 	assert.Equal(errList[2], "expected next token to be IDENT, got INT instead")
+}
+
+func TestReturnStatements(t *testing.T) {
+	assert := assert.New(t)
+	input := `
+	return 5;
+	return 10;
+	return 9834443;
+	`
+
+	l := lexer.New(input)
+	p := parser.New(l)
+
+	program := p.ParseProgram()
+	assert.NotNil(program)
+	assert.Equal(3, len(program.Statements))
+	for _, stmt := range program.Statements {
+		returnStmt, ok := stmt.(*ast.ReturnStatement)
+		assert.True(ok)
+		assert.Equal(returnStmt.TokenLiteral(), "return")
+	}
 }

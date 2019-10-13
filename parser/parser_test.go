@@ -6,9 +6,23 @@ import (
 	"github.com/rsb/monkey_interpreter/ast"
 	"github.com/rsb/monkey_interpreter/lexer"
 	"github.com/rsb/monkey_interpreter/parser"
+	"github.com/rsb/monkey_interpreter/token"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func checkParserErrors(t *testing.T, p *parser.Parser) {
+	errs := p.Errors()
+	if len(errs) == 0 {
+		return
+	}
+
+	for _, msg := range errs {
+		t.Errorf("parser error: %q", msg)
+	}
+
+	t.FailNow()
+}
 
 func TestLetStatements(t *testing.T) {
 	assert := assert.New(t)
@@ -82,4 +96,46 @@ func TestReturnStatements(t *testing.T) {
 		assert.True(ok)
 		assert.Equal(returnStmt.TokenLiteral(), "return")
 	}
+}
+
+func TestNodeStringMethod(t *testing.T) {
+	assert := assert.New(t)
+	program := &ast.Program{
+		Statements: []ast.Statement{
+			&ast.LetStatement{
+				Token: token.Token{Type: token.LET, Literal: "let"},
+				Name: &ast.Identifier{
+					Token: token.Token{Type: token.IDENT, Literal: "myVar"},
+					Value: "myVar",
+				},
+				Value: &ast.Identifier{
+					Token: token.Token{Type: token.IDENT, Literal: "anotherVar"},
+					Value: "anotherVar",
+				},
+			},
+		},
+	}
+
+	assert.Equal("let myVar = anotherVar;", program.String())
+
+}
+
+func TestIdentifierExpression(t *testing.T) {
+	assert := assert.New(t)
+	in := "foobar;"
+	l := lexer.New(in)
+	p := parser.New(l)
+
+	program := p.ParseProgram()
+	checkParserErrors(t, p)
+
+	assert.Equal(1, len(program.Statements), "program has not enough statements")
+
+	stmt, ok := program.Statements[0].(*ast.ExpressionStatment)
+	assert.True(ok)
+
+	ident, ok := stmt.Expression.(*ast.Identifier)
+	assert.True(ok)
+	assert.Equal(ident.Value, "foobar")
+	assert.Equal(ident.TokenLiteral(), "foobar")
 }

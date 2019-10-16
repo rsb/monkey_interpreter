@@ -1,6 +1,7 @@
 package parser_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/rsb/monkey_interpreter/ast"
@@ -158,4 +159,41 @@ func TestIntegerLiteralExpression(t *testing.T) {
 	assert.True(ok)
 	assert.Equal(ident.Value, int64(5))
 	assert.Equal(ident.TokenLiteral(), "5")
+}
+
+func TestPrefixExpressions(t *testing.T) {
+	assert := assert.New(t)
+	prefixTests := []struct {
+		input        string
+		operator     string
+		integerValue int64
+	}{
+		{"!5", "!", 5},
+		{"-15", "-", 15},
+	}
+
+	for _, tt := range prefixTests {
+		l := lexer.New(tt.input)
+		p := parser.New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+		assert.Len(program.Statements, 1, "program should have 1 statement got %d", len(program.Statements))
+
+		stmt, ok := program.Statements[0].(*ast.ExpressionStatment)
+		assert.True(ok, "stmt is not *ast.ExpressionStatement got=%T", program.Statements[0])
+
+		exp, ok := stmt.Expression.(*ast.PrefixExpression)
+		assert.True(ok, "exp is not a *ast.PrefixEpression got=%T", stmt.Expression)
+
+		assert.Equal(exp.Operator, tt.operator)
+		testIntegerLiteral(t, exp.Right, tt.integerValue)
+	}
+}
+
+func testIntegerLiteral(t *testing.T, il ast.Expression, value int64) {
+	integ, ok := il.(*ast.IntegerLiteral)
+	assert.True(t, ok, "il is not *ast.IntegerLiteral got=%T", il)
+
+	assert.Equal(t, integ.Value, value)
+	assert.Equal(t, integ.TokenLiteral(), fmt.Sprintf("%d", value))
 }

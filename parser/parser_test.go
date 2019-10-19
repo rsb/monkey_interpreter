@@ -58,26 +58,49 @@ func TestLetStatements(t *testing.T) {
 	}
 }
 
-func TestLetSTatementsWithErrors(t *testing.T) {
+func TestLetStatementErrorNoEqual(t *testing.T) {
 	assert := assert.New(t)
-	input := `
-		let x 5;
-		let = 10;
-		let 838383;
-	`
 
+	input := `let x 5`
 	l := lexer.New(input)
 	p := parser.New(l)
 	program := p.ParseProgram()
-	assert.NotNil(program)
 
+	assert.NotNil(program)
 	errList := p.Errors()
-	assert.Equal(len(errList), 3)
+	assert.Equal(1, len(errList))
 	assert.Equal(errList[0], "expected next token to be =, got INT instead")
-	assert.Equal(errList[1], "expected next token to be IDENT, got = instead")
-	assert.Equal(errList[2], "expected next token to be IDENT, got INT instead")
 }
 
+func TestLetStatementErrorNoIDENTAndNoEqual(t *testing.T) {
+	assert := assert.New(t)
+
+	input := `let 838383`
+	l := lexer.New(input)
+	p := parser.New(l)
+	program := p.ParseProgram()
+
+	assert.NotNil(program)
+	errList := p.Errors()
+	assert.Equal(1, len(errList))
+	assert.Equal(errList[0], "expected next token to be IDENT, got INT instead")
+}
+
+func TestLetStatementErrorNoIDENT(t *testing.T) {
+	assert := assert.New(t)
+
+	input := `let = 10`
+	l := lexer.New(input)
+	p := parser.New(l)
+	program := p.ParseProgram()
+
+	assert.NotNil(program)
+	errList := p.Errors()
+
+	assert.Equal(2, len(errList))
+	assert.Equal("expected next token to be IDENT, got = instead", errList[0])
+	assert.Equal("no prefix parse function for = found", errList[1])
+}
 func TestReturnStatements(t *testing.T) {
 	assert := assert.New(t)
 	input := `
@@ -187,6 +210,112 @@ func TestPrefixExpressions(t *testing.T) {
 
 		assert.Equal(exp.Operator, tt.operator)
 		testIntegerLiteral(t, exp.Right, tt.integerValue)
+	}
+}
+
+func TestParsingInfixExpressions(t *testing.T) {
+	assert := assert.New(t)
+
+	infixTests := []struct {
+		input      string
+		leftValue  int64
+		operator   string
+		rightValue int64
+	}{
+		{"5 + 5", 5, "+", 5},
+		{"5 - 5", 5, "-", 5},
+		{"5 * 5", 5, "*", 5},
+		{"5 / 5", 5, "/", 5},
+		{"5 > 5", 5, ">", 5},
+		{"5 < 5", 5, "<", 5},
+		{"5 == 5", 5, "==", 5},
+		{"5 != 5", 5, "!=", 5},
+	}
+
+	for _, tt := range infixTests {
+		l := lexer.New(tt.input)
+		p := parser.New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+
+		assert.Len(program.Statements, 1, "program should have 1 statement got %d", len(program.Statements))
+
+		stmt, ok := program.Statements[0].(*ast.ExpressionStatment)
+		assert.True(ok, "stmt is not *ast.ExpressionStatement got=%T", program.Statements[0])
+
+		exp, ok := stmt.Expression.(*ast.InfixExpression)
+		assert.True(ok, "exp is not a *ast.PrefixEpression got=%T", stmt.Expression)
+
+		testIntegerLiteral(t, exp.Left, tt.leftValue)
+		assert.Equal(exp.Operator, tt.operator)
+		testIntegerLiteral(t, exp.Right, tt.rightValue)
+	}
+}
+
+func TestParseProgram_OperatorPrecendence(t *testing.T) {
+	assert := assert.New(t)
+
+	infixTests := []struct {
+		input    string
+		expected string
+	}{
+		{
+			"-a * b",
+			"((-a) * b)",
+		},
+		{
+			"!-a",
+			"(!(-a))",
+		},
+		{
+			"a + b + c",
+			"((a + b) + c)",
+		},
+		{
+			"a + b - c",
+			"((a + b) - c)",
+		},
+		{
+			"a * b * c",
+			"((a * b) * c)",
+		},
+		{
+			"a * b / c",
+			"((a * b) / c)",
+		},
+		{
+			"a + b / c",
+			"(a + (b / c))",
+		},
+		{
+			"a + b * c + d / e - f",
+			"(((a + (b * c)) + (d / e)) - f)",
+		},
+		{
+			"3 + 4; -5 * 5",
+			"(3 + 4)((-5) * 5)",
+		},
+		{
+			"5 > 4 == 3 < 4",
+			"((5 > 4) == (3 < 4))",
+		},
+		{
+			"5 < 4 != 3 > 4",
+			"((5 < 4) != (3 > 4))",
+		},
+		{
+			"3 + 4 * 5 == 3 * 1 + 4 * 5",
+			"((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))",
+		},
+	}
+
+	for _, tt := range infixTests {
+		l := lexer.New(tt.input)
+		p := parser.New(l)
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+		actual := program.String()
+		assert.Equal(tt.expected, actual)
 	}
 }
 

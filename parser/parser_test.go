@@ -1,7 +1,6 @@
 package parser_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/rsb/monkey_interpreter/ast"
@@ -12,49 +11,33 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func checkParserErrors(t *testing.T, p *parser.Parser) {
-	errs := p.Errors()
-	if len(errs) == 0 {
-		return
-	}
-
-	for _, msg := range errs {
-		t.Errorf("parser error: %q", msg)
-	}
-
-	t.FailNow()
-}
-
 func TestLetStatements(t *testing.T) {
 	assert := assert.New(t)
-	input := `
-	let x = 5;
-	let y = 10;
-	let foobar = 838383;
-	`
-
-	l := lexer.New(input)
-	p := parser.New(l)
-
-	program := p.ParseProgram()
-	assert.NotNil(program)
-	assert.Equal(3, len(program.Statements))
-
 	tests := []struct {
-		expectedIdentifier string
+		input                string
+		expectedIdentitifier string
+		expectedValue        interface{}
 	}{
-		{"x"},
-		{"y"},
-		{"foobar"},
+		{"let x = 5;", "x", 5},
+		{"let y = 10;", "y", 10},
+		{"let foobar = 83383;", "foobar", 83383},
 	}
 
-	for i, tt := range tests {
-		stmt := program.Statements[i]
-		assert.Equal(stmt.TokenLiteral(), "let")
-		letStmt, ok := stmt.(*ast.LetStatement)
-		assert.True(ok)
-		assert.Equal(letStmt.Name.Value, tt.expectedIdentifier)
-		assert.Equal(letStmt.Name.TokenLiteral(), tt.expectedIdentifier)
+	for _, tt := range tests {
+
+		l := lexer.New(tt.input)
+		p := parser.New(l)
+
+		program := p.ParseProgram()
+		checkParserErrors(t, p)
+		assert.NotNil(program)
+		assert.Len(program.Statements, 1, "program should only have 1 statement")
+
+		stmt := program.Statements[0]
+		testLetStatement(t, stmt, tt.expectedIdentitifier)
+
+		val := stmt.(*ast.LetStatement).Value
+		testLiteralExpression(t, val, tt.expectedValue)
 	}
 }
 
@@ -101,7 +84,7 @@ func TestLetStatementErrorNoIDENT(t *testing.T) {
 	assert.Equal("expected next token to be IDENT, got = instead", errList[0])
 	assert.Equal("no prefix parse function for = found", errList[1])
 }
-func TestReturnStatements(t *testing.T) {
+func TestThreeReturnStatements(t *testing.T) {
 	assert := assert.New(t)
 	input := `
 	return 5;
@@ -243,12 +226,7 @@ func TestParsingInfixExpressions(t *testing.T) {
 		stmt, ok := program.Statements[0].(*ast.ExpressionStatment)
 		assert.True(ok, "stmt is not *ast.ExpressionStatement got=%T", program.Statements[0])
 
-		exp, ok := stmt.Expression.(*ast.InfixExpression)
-		assert.True(ok, "exp is not a *ast.PrefixEpression got=%T", stmt.Expression)
-
-		testIntegerLiteral(t, exp.Left, tt.leftValue)
-		assert.Equal(exp.Operator, tt.operator)
-		testIntegerLiteral(t, exp.Right, tt.rightValue)
+		testInfixExpression(t, stmt.Expression, tt.leftValue, tt.operator, tt.rightValue)
 	}
 }
 
@@ -317,12 +295,4 @@ func TestParseProgram_OperatorPrecendence(t *testing.T) {
 		actual := program.String()
 		assert.Equal(tt.expected, actual)
 	}
-}
-
-func testIntegerLiteral(t *testing.T, il ast.Expression, value int64) {
-	integ, ok := il.(*ast.IntegerLiteral)
-	assert.True(t, ok, "il is not *ast.IntegerLiteral got=%T", il)
-
-	assert.Equal(t, integ.Value, value)
-	assert.Equal(t, integ.TokenLiteral(), fmt.Sprintf("%d", value))
 }

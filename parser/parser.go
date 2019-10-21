@@ -52,6 +52,7 @@ func New(l *lexer.Lexer) *Parser {
 		l:      l,
 		errors: []string{},
 	}
+
 	p.prefixParseFns = make(map[token.TokenType]prefixParseFn)
 	p.RegisterPrefix(token.IDENT, p.parseIdentifier)
 	p.RegisterPrefix(token.INT, p.parseIntegerLiteral)
@@ -85,11 +86,6 @@ func (p *Parser) RegisterInfix(tokenType token.TokenType, fn infixParseFn) {
 
 func (p *Parser) Errors() []string {
 	return p.errors
-}
-
-func (p *Parser) nextToken() {
-	p.curToken = p.peekToken
-	p.peekToken = p.l.NextToken()
 }
 
 func (p *Parser) ParseProgram() *ast.Program {
@@ -130,6 +126,9 @@ func (p *Parser) parseLetStatement() *ast.LetStatement {
 		return nil
 	}
 
+	p.nextToken()
+	stmt.Value = p.parseExpression(LOWEST)
+
 	// TODO: We're skipping the expression until we encounter a semicolon
 	for !p.curTokenIs(token.SEMICOLON) {
 		p.nextToken()
@@ -138,7 +137,21 @@ func (p *Parser) parseLetStatement() *ast.LetStatement {
 	return &stmt
 }
 
+func (p *Parser) parseReturnStatement() *ast.ReturnStatement {
+	stmt := ast.ReturnStatement{Token: p.curToken}
+
+	p.nextToken()
+
+	// TODO: we are skipping the expression until we encounter a semicolon
+	for !p.curTokenIs(token.SEMICOLON) {
+		p.nextToken()
+	}
+
+	return &stmt
+}
+
 func (p *Parser) parseExpressionStatement() *ast.ExpressionStatment {
+
 	stmt := ast.ExpressionStatment{Token: p.curToken}
 
 	stmt.Expression = p.parseExpression(LOWEST)
@@ -150,12 +163,8 @@ func (p *Parser) parseExpressionStatement() *ast.ExpressionStatment {
 	return &stmt
 }
 
-func (p *Parser) noPrefixParseFnError(t token.TokenType) {
-	msg := fmt.Sprintf("no prefix parse function for %s found", t)
-	p.errors = append(p.errors, msg)
-}
-
 func (p *Parser) parseExpression(precedence int) ast.Expression {
+
 	prefix := p.prefixParseFns[p.curToken.Type]
 	if prefix == nil {
 		p.noPrefixParseFnError(p.curToken.Type)
@@ -173,24 +182,6 @@ func (p *Parser) parseExpression(precedence int) ast.Expression {
 	}
 
 	return leftExpr
-}
-
-func (p *Parser) parseIdentifier() ast.Expression {
-	return &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
-}
-
-func (p *Parser) parseIntegerLiteral() ast.Expression {
-	lit := ast.IntegerLiteral{Token: p.curToken}
-
-	value, err := strconv.ParseInt(p.curToken.Literal, 0, 64)
-	if err != nil {
-		msg := fmt.Sprintf("could not parse %q as integer", p.curToken.Literal)
-		p.errors = append(p.errors, msg)
-		return nil
-	}
-	lit.Value = value
-
-	return &lit
 }
 
 func (p *Parser) parsePrefixExpression() ast.Expression {
@@ -220,17 +211,22 @@ func (p *Parser) parseInfixExpression(left ast.Expression) ast.Expression {
 	return expr
 }
 
-func (p *Parser) parseReturnStatement() *ast.ReturnStatement {
-	stmt := ast.ReturnStatement{Token: p.curToken}
+func (p *Parser) parseIdentifier() ast.Expression {
+	return &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+}
 
-	p.nextToken()
+func (p *Parser) parseIntegerLiteral() ast.Expression {
+	lit := ast.IntegerLiteral{Token: p.curToken}
 
-	// TODO: we are skipping the expression until we encounter a semicolon
-	for !p.curTokenIs(token.SEMICOLON) {
-		p.nextToken()
+	value, err := strconv.ParseInt(p.curToken.Literal, 0, 64)
+	if err != nil {
+		msg := fmt.Sprintf("could not parse %q as integer", p.curToken.Literal)
+		p.errors = append(p.errors, msg)
+		return nil
 	}
+	lit.Value = value
 
-	return &stmt
+	return &lit
 }
 
 func (p *Parser) peekPrecedence() int {
@@ -249,6 +245,11 @@ func (p *Parser) curPrecedence() int {
 	return LOWEST
 }
 
+func (p *Parser) nextToken() {
+	p.curToken = p.peekToken
+	p.peekToken = p.l.NextToken()
+}
+
 func (p *Parser) curTokenIs(t token.TokenType) bool {
 	return p.curToken.Type == t
 }
@@ -264,6 +265,11 @@ func (p *Parser) expectPeek(t token.TokenType) bool {
 	}
 	p.peekError(t)
 	return false
+}
+
+func (p *Parser) noPrefixParseFnError(t token.TokenType) {
+	msg := fmt.Sprintf("no prefix parse function for %s found", t)
+	p.errors = append(p.errors, msg)
 }
 
 func (p *Parser) peekError(t token.TokenType) {
